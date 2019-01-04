@@ -1,0 +1,58 @@
+.container-fluid {
+  text-align: center;
+}
+
+#res {
+  background-color: rgb(231, 247, 6);
+}
+
+.btn-group{
+  margin: 5px;
+}
+
+input{
+  text-align: center; 
+  max-width: 60px;
+  margin: 10px;
+}
+
+.button {
+  padding:5px;
+  cursor:pointer;
+  background:grey;
+  color:white;
+  width:25px;
+  height:auto;
+  text-align:center;
+  display:inline-block;
+ }
+ 
+ .button:hover {
+ background:black;
+ }
+
+.btn-circle {
+  width: 30px;
+  height: 30px;
+  text-align: center;
+  padding: 6px 0;
+  font-size: 12px;
+  line-height: 1.428571429;
+  border-radius: 15px;
+}
+.btn-circle.btn-lg {
+  width: 50px;
+  height: 50px;
+  padding: 10px 16px;
+  font-size: 18px;
+  line-height: 1.33;
+  border-radius: 10px;
+}
+.btn-circle.btn-xl {
+  width: 70px;
+  height: 70px;
+  padding: 10px 16px;
+  font-size: 24px;
+  line-height: 1.33;
+  border-radius: 35px;
+}
