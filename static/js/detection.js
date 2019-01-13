@@ -7,7 +7,7 @@ $(function () {
         if (JSON.parse(command).command == "") {
             var command = JSON.stringify({ "command": $(this).find('input').val() });
         }
-        console.log(command)
+        //console.log(command)
         if (detection_cmd.includes(JSON.parse(command).command)) {
             url = '/detection';
             post(url, command);

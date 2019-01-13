@@ -34,6 +34,7 @@ is_async_mode = True
 # -1 : flipping around both axis
 flip_code = "reset"
 
+
 # construct the argument parse and parse the arguments
 def build_argparser():
     parser = ArgumentParser()
@@ -50,6 +51,13 @@ def build_argparser():
         required=True,
         type=str)
     parser.add_argument(
+        "-l",
+        "--cpu_extension",
+        help="MKLDNN (CPU)-targeted custom layers.Absolute path to a shared library with the kernels "
+        "impl.",
+        type=str,
+        default=None)
+    parser.add_argument(
         "-d",
         "--device",
         help="Specify the target device to infer on; CPU, GPU, FPGA or MYRIAD is acceptable. Demo "
@@ -62,6 +70,10 @@ def build_argparser():
         help="Probability threshold for detections filtering",
         default=0.2,
         type=float)
+    parser.add_argument(
+        '--no_v4l',
+        help='cv2.VideoCapture without cv2.CAP_V4L',
+        action='store_true')
 
     return parser
 
@@ -75,12 +87,14 @@ def gen(camera):
 
 @app.route('/')
 def index():
-    return render_template('index.html', is_async_mode=is_async_mode, flip_code=flip_code)
+    return render_template(
+        'index.html', is_async_mode=is_async_mode, flip_code=flip_code)
 
 
 @app.route('/video_feed')
 def video_feed():
-    camera = VideoCamera(input, model_xml, model_bin, device, prob_threshold, is_async_mode)
+    camera = VideoCamera(input, model_xml, model_bin, device, prob_threshold,
+                         cpu_extention, is_async_mode, no_v4l)
     return Response(
         gen(camera), mimetype='multipart/x-mixed-replace; boundary=frame')
 
@@ -89,13 +103,13 @@ def video_feed():
 def detection():
     global is_async_mode
     global flip_code
-    command = request.json['command']
 
+    command = request.json['command']
     if command == "async":
         is_async_mode = True
     elif command == "sync":
         is_async_mode = False
-    
+
     if command == "flip-x":
         flip_code = "0"
     elif command == "flip-y":
@@ -105,8 +119,13 @@ def detection():
     elif command == "flip-reset":
         flip_code = "reset"
 
-    result = {"command": "is_async_mode", "is_async_mode": is_async_mode, "flip_code": flip_code}
-    logger.info("command:{} is_async:{} flip_code:{}".format(command, is_async_mode, flip_code))
+    result = {
+        "command": "is_async_mode",
+        "is_async_mode": is_async_mode,
+        "flip_code": flip_code
+    }
+    logger.info("command:{} is_async:{} flip_code:{}".format(
+        command, is_async_mode, flip_code))
     return jsonify(ResultSet=json.dumps(result))
 
 
@@ -114,9 +133,17 @@ if __name__ == '__main__':
 
     args = build_argparser().parse_args()
     input = args.input
+    cpu_extention = args.cpu_extension
     model_xml = args.model
     model_bin = os.path.splitext(model_xml)[0] + ".bin"
     device = args.device
     prob_threshold = args.prob_threshold
+    no_v4l = args.no_v4l
+
+    if device == "CPU" and cpu_extention is None:
+        print(
+            "\nPlease try to specify cpu extensions library path in demo's command line parameters using -l "
+            "or --cpu_extension command line argument")
+        sys.exit(1)
 
     app.run(host='0.0.0.0', threaded=True)

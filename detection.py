@@ -21,7 +21,6 @@
 # import the necessary packages
 import numpy as np
 import cv2
-import sys
 from logging import getLogger, basicConfig, DEBUG, INFO
 from timeit import default_timer as timer
 from openvino.inference_engine import IENetwork, IEPlugin
@@ -43,23 +42,27 @@ basicConfig(
 
 
 class ObjectDetection(object):
-    def __init__(self, frame_prop, model_xml, model_bin, device, prob_threshold, is_async_mode):
+    def __init__(self, frame_prop, model_xml, model_bin, device,
+                 prob_threshold, cpu_extension, is_async_mode):
         self.prob_threshold = prob_threshold
-        # Plugin initialization for specified device
+        # Plugin initialization for specified device and load extensions library if specified
         logger.info("Initializing plugin for {} device...".format(device))
-        plugin = IEPlugin(device=device, plugin_dirs=None)
+        self.plugin = IEPlugin(device=device, plugin_dirs=None)
+        if cpu_extension and 'CPU' in device:
+            self.plugin.add_cpu_extension(cpu_extension)
         # Read IR
         logger.info("Reading IR...")
-        net = IENetwork(model=model_xml, weights=model_bin)
-        self.input_blob = next(iter(net.inputs))
-        self.out_blob = next(iter(net.outputs))
+        self.net = IENetwork(model=model_xml, weights=model_bin)
+
+        self.input_blob = next(iter(self.net.inputs))
+        self.out_blob = next(iter(self.net.outputs))
         logger.info("Loading IR to the plugin...")
-        self.exec_net = plugin.load(network=net, num_requests=2)
+        self.exec_net = self.plugin.load(network=self.net, num_requests=2)
         # Read and pre-process input image
-        n, c, h, w = net.inputs[self.input_blob].shape
-        logger.info("net.inpute.shape(n, c, h, w):{}".format(net.inputs[
+        n, c, h, w = self.net.inputs[self.input_blob].shape
+        logger.info("net.inpute.shape(n, c, h, w):{}".format(self.net.inputs[
             self.input_blob].shape))
-        del net
+        del self.net
         self.cur_request_id = 0
         self.next_request_id = 1
         logger.info(
@@ -78,18 +81,23 @@ class ObjectDetection(object):
         # in the truly Async mode we start the NEXT infer request, while waiting for the CURRENT to complete
         # in the regular mode we start the CURRENT request and immediately wait for it's completion
         inf_start = timer()
-        logger.debug("cur_request_id:{} next_request_id:{} is_async:{}".format(
+        logger.info("cur_request_id:{} next_request_id:{} is_async:{}".format(
             self.cur_request_id, self.next_request_id, is_async_mode))
         if is_async_mode:
             in_frame = cv2.dnn.blobFromImage(
-                cv2.resize(next_frame, (300, 300)), 0.007843, (300, 300), 127.5)
-            self.exec_net.start_async(request_id=self.next_request_id, inputs={self.input_blob: in_frame})
+                cv2.resize(next_frame, (300, 300)), 0.007843, (300, 300),
+                127.5)
+            self.exec_net.start_async(
+                request_id=self.next_request_id,
+                inputs={self.input_blob: in_frame})
         else:
             in_frame = cv2.dnn.blobFromImage(
                 cv2.resize(frame, (300, 300)), 0.007843, (300, 300), 127.5)
             # is_async_mode change false from true, wait request
             if self.exec_net.requests[self.cur_request_id].wait(-1) == 0:
-                self.exec_net.start_async(request_id=self.cur_request_id, inputs={self.input_blob: in_frame})
+                self.exec_net.start_async(
+                    request_id=self.cur_request_id,
+                    inputs={self.input_blob: in_frame})
         logger.debug("in_frame shape:{}".format(in_frame.shape))
         if self.exec_net.requests[self.cur_request_id].wait(-1) == 0:
             inf_end = timer()
@@ -107,7 +115,8 @@ class ObjectDetection(object):
                 if confidence > self.prob_threshold:
                     # extract the index of the class label from the `detections`, then compute the (x, y)-coordinates of the bounding box for the object
                     idx = int(detections[0, 0, i, 1])
-                    box = detections[0, 0, i, 3:7] * np.array([self.w, self.h, self.w, self.h])
+                    box = detections[0, 0, i, 3:7] * np.array(
+                        [self.w, self.h, self.w, self.h])
                     (startX, startY, endX, endY) = box.astype("int")
                     logger.debug("startX, startY, endX, endY: {}".format(
                         box.astype("int")))
@@ -150,8 +159,8 @@ class ObjectDetection(object):
             self.curr_fps = 0
 
         # Draw FPS in top left corner
-        cv2.rectangle(frame, (self.w - 50, 0), (self.w, 17),
-                      (255, 255, 255), -1)
+        cv2.rectangle(frame, (self.w - 50, 0), (self.w, 17), (255, 255, 255),
+                      -1)
         cv2.putText(frame, self.fps, (self.w - 50 + 3, 10),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 0, 0), 1)
 

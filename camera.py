@@ -5,6 +5,7 @@ https://github.com/ECI-Robotics/opencv_remote_streaming_processing/
 import cv2
 import detection
 import os
+import sys
 from logging import getLogger, basicConfig, DEBUG, INFO
 
 logger = getLogger(__name__)
@@ -15,13 +16,18 @@ basicConfig(
 
 frame_prop = (640, 480)
 
+
 class VideoCamera(object):
-    def __init__(self, input, model_xml, model_bin, device, prob_threshold, is_async_mode):
+    def __init__(self, input, model_xml, model_bin, device, prob_threshold,
+                 cpu_extention, is_async_mode, no_v4l):
 
         if input == 'cam':
             self.input_stream = 0
-            # for Picamera , added VideoCaptureAPIs(cv2.CAP_V4L)
-            self.cap = cv2.VideoCapture(self.input_stream, cv2.CAP_V4L)
+            if no_v4l:
+                self.cap = cv2.VideoCapture(self.input_stream)
+            else:
+                # for Picamera, added VideoCaptureAPIs(cv2.CAP_V4L)
+                self.cap = cv2.VideoCapture(self.input_stream, cv2.CAP_V4L)
         else:
             self.input_stream = input
             assert os.path.isfile(input), "Specified input file doesn't exist"
@@ -33,7 +39,8 @@ class VideoCamera(object):
 
         if ret:
             self.detection = detection.ObjectDetection(
-                frame_prop, model_xml, model_bin, device, prob_threshold, is_async_mode)
+                frame_prop, model_xml, model_bin, device, prob_threshold,
+                cpu_extention, is_async_mode)
 
     def __del__(self):
         self.cap.release()
@@ -57,10 +64,11 @@ class VideoCamera(object):
         if not ret:
             return
 
-        frame = self.detection.start_inference(self.frame, next_frame, is_async_mode)
+        frame = self.detection.start_inference(self.frame, next_frame,
+                                               is_async_mode)
         ret, jpeg = cv2.imencode('1.jpg', frame)
 
         if is_async_mode:
             self.frame = next_frame
-            
+
         return jpeg.tostring()
