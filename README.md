@@ -52,14 +52,15 @@ You need Raspbian* 9 OS (Stretch).
 
 https://software.intel.com/en-us/articles/OpenVINO-Install-Raspberrypi
 
-To download IR files and cpu extension dll from google drive.
+Download IR files and cpu extension dll from google drive.
 
-URL: https://drive.google.com/open?id=18e4fhpPCBrJR-MVpAGcx-3NtFxWTcEGk
+* URL: https://drive.google.com/open?id=18e4fhpPCBrJR-MVpAGcx-3NtFxWTcEGk
   * File extension.zip
   * Size: 32,084,489 byte
   * MD5 hash : 8e46de84d6ee0b61ff9224e7087e01e7
 
-* Extract extension.zip and store extension folder under tellooo(file lists)
+* Extract extension.zip and store extension folder under the "object_detection_demo"
+
 ```sh
 extension/cpu_extension.dll
 extension/IR/MobileNetSSD_FP16/MobileNetSSD_deploy.bin
