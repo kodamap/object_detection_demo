@@ -1,6 +1,6 @@
 $(function () {
     var detection_cmd = ['async', 'sync'];
-    var flip_cmd = ['flip-x', 'flip-y', 'flip-xy', 'flip-reset'];
+    var flip_cmd = ['flip'];
     var url = "";
     $('.btn').on('click', function () {
         var command = JSON.stringify({ "command": $('#' + $(this).attr('id')).val() });
@@ -13,7 +13,7 @@ $(function () {
             post(url, command);
         }
         if (flip_cmd.includes(JSON.parse(command).command)) {
-            url = '/detection';
+            url = '/flip';
             post(url, command);
         }
     });

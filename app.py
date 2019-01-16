@@ -32,7 +32,7 @@ is_async_mode = True
 #  0 : flipping around x-axis
 #  1 : flipping around y-axis
 # -1 : flipping around both axis
-flip_code = "reset"
+flip_code = None
 
 
 # construct the argument parse and parse the arguments
@@ -94,7 +94,7 @@ def index():
 @app.route('/video_feed')
 def video_feed():
     camera = VideoCamera(input, model_xml, model_bin, device, prob_threshold,
-                         cpu_extention, is_async_mode, no_v4l)
+                         cpu_extention, is_async_mode, flip_code, no_v4l)
     return Response(
         gen(camera), mimetype='multipart/x-mixed-replace; boundary=frame')
 
@@ -102,7 +102,6 @@ def video_feed():
 @app.route('/detection', methods=['POST'])
 def detection():
     global is_async_mode
-    global flip_code
 
     command = request.json['command']
     if command == "async":
@@ -110,14 +109,30 @@ def detection():
     elif command == "sync":
         is_async_mode = False
 
-    if command == "flip-x":
-        flip_code = "0"
-    elif command == "flip-y":
-        flip_code = "1"
-    elif command == "flip-xy":
-        flip_code = "-1"
-    elif command == "flip-reset":
-        flip_code = "reset"
+    result = {
+        "command": "is_async_mode",
+        "is_async_mode": is_async_mode,
+        "flip_code": flip_code
+    }
+    logger.info("command:{} is_async:{} flip_code:{}".format(
+        command, is_async_mode, flip_code))
+    return jsonify(ResultSet=json.dumps(result))
+
+
+@app.route('/flip', methods=['POST'])
+def flip_frame():
+    global flip_code
+
+    command = request.json['command']
+
+    if command == "flip" and flip_code is None:
+        flip_code = 0
+    elif command == "flip" and flip_code == 0:
+        flip_code = 1
+    elif command == "flip" and flip_code == 1:
+        flip_code = -1
+    elif command == "flip" and flip_code == -1:
+        flip_code = None
 
     result = {
         "command": "is_async_mode",

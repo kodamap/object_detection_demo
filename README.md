@@ -118,6 +118,9 @@ optional arguments:
 
 Run app
 
+* Specify **MYRIAD** with "-d(device)" option.
+* Select FP16 IR model.
+
 ```sh
 $ python3 app.py -i cam -m IR\MobileNetSSD_FP16\MobileNetSSD_deploy.xml -d MYRIAD
 ```
@@ -130,9 +133,11 @@ http://<your raspberryPi ip addr>:5000/
 
 ## Misc
 
-Test on PC(Windows10)
+Test with PC(Windows10)
 
-* specify cpu_extension.dll with "-l" option.
+* Specify cpu_extension.dll with "-l" option.
+* Select FP32 IR model.
+* You might to need to add "--no_v4l" option.
 
 ```sh
 $ python app.py -i cam -l extension\cpu_extension.dll -m extension\IR\MobileNetSSD_FP32\MobileNetSSD_deploy.xml --no_v4l

@@ -52,27 +52,14 @@
                         <input type="radio" value="sync" autocomplete="off">sync mode</label>
                     {% endif %}
                 </div>
+                <button type="button" class="btn btn-second btn-circle btn-lg" data-toggle="tooltip" data-placement="right"
+                    aria-pressed="false" autocomplete="off" id="flip" value="flip" title="flip frame x-axis:0, y-axis:1, both:-1">
+                    <i class="fas fa-video"></i></button>
             </div>
         </div>
         <div class="row justify-content-center"">
             <div class=" col-lg-12">
             <img class="img-fluid img-thumbnail rounded mx-auto d-block" src="{{ url_for('video_feed') }}" alt="...........">
-        </div>
-        <div class="row">
-            <div class="col-lg-12">
-                <button type="button" class="btn btn-second btn-circle btn-lg" data-toggle="tooltip" data-placement="left"
-                    aria-pressed="false" autocomplete="off" id="flip-x" value="flip-x" title="flipping around x-axis"><i
-                        class="fas fa-arrows-alt-v"></i></button>
-                <button type="button" class="btn btn-second btn-circle btn-lg" data-toggle="tooltip" data-placement="top"
-                    aria-pressed="false" autocomplete="off" id="flip-y" value="flip-y" title="flipping around y-axis"><i
-                        class="fas fa-arrows-alt-h"></i></button>
-                <button type="button" class="btn btn-second btn-circle btn-lg" data-toggle="tooltip" data-placement="top"
-                    aria-pressed="false" autocomplete="off" id="flip-xy" value="flip-xy" title="flipping around both-axis"><i
-                        class="fas fa-arrows-alt"></i></button>
-                <button type="button" class="btn btn-second btn-circle btn-lg" data-toggle="tooltip" data-placement="right"
-                    aria-pressed="false" autocomplete="off" id="flip-reset" value="flip-reset" title="reset flip"><i
-                        class="fas fa-location-arrow"></i></button>
-            </div>
         </div>
     </div>
     <script src="../static/js/popper.js"></script>

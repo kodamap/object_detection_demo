@@ -19,7 +19,8 @@ frame_prop = (640, 480)
 
 class VideoCamera(object):
     def __init__(self, input, model_xml, model_bin, device, prob_threshold,
-                 cpu_extention, is_async_mode, no_v4l):
+                 cpu_extention, is_async_mode, flip_code, no_v4l):
+        self.flip_code = flip_code
 
         if input == 'cam':
             self.input_stream = 0
@@ -27,7 +28,13 @@ class VideoCamera(object):
                 self.cap = cv2.VideoCapture(self.input_stream)
             else:
                 # for Picamera, added VideoCaptureAPIs(cv2.CAP_V4L)
-                self.cap = cv2.VideoCapture(self.input_stream, cv2.CAP_V4L)
+                try:
+                    self.cap = cv2.VideoCapture(self.input_stream, cv2.CAP_V4L)
+                except:
+                    logger.error(
+                        "cv2.VideoCapture() does not need v4l option. Try to start with --no_v4l option."
+                    )
+                    sys.exit(1)
         else:
             self.input_stream = input
             assert os.path.isfile(input), "Specified input file doesn't exist"
@@ -50,17 +57,19 @@ class VideoCamera(object):
             cv2.CAP_PROP_FRAME_HEIGHT), self.cap.get(cv2.CAP_PROP_FPS)
 
     def get_frame(self, is_async_mode, flip_code):
+        self.flip_code = flip_code
+
         if is_async_mode:
             ret, next_frame = self.cap.read()
             next_frame = cv2.resize(next_frame, frame_prop)
-            if self.input_stream == 0 and flip_code != "reset":
-                next_frame = cv2.flip(next_frame, int(flip_code))
+            if self.input_stream == 0 and self.flip_code is not None:
+                next_frame = cv2.flip(next_frame, int(self.flip_code))
         else:
             ret, self.frame = self.cap.read()
             self.frame = cv2.resize(self.frame, frame_prop)
             next_frame = None
-            if self.input_stream == 0 and flip_code != "reset":
-                self.frame = cv2.flip(self.frame, int(flip_code))
+            if self.input_stream == 0 and self.flip_code is not None:
+                self.frame = cv2.flip(self.frame, int(self.flip_code))
         if not ret:
             return
 
