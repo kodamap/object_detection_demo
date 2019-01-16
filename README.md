@@ -137,7 +137,7 @@ Test with PC(Windows10)
 
 * Specify cpu_extension.dll with "-l" option.
 * Select FP32 IR model.
-* You might to need to add "--no_v4l" option.
+* You might need to add "--no_v4l" option.
 
 ```sh
 $ python app.py -i cam -l extension\cpu_extension.dll -m extension\IR\MobileNetSSD_FP32\MobileNetSSD_deploy.xml --no_v4l
