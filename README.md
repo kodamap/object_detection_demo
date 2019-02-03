@@ -6,7 +6,7 @@ This is Object detection demo for MobileNet-SSD on NCS2 with Raspberry Pi.
 
 You can do followings:
 * Object Detection(MobileNet-SSD).
-* Face Detection and Face analytics (Agen/Gender, Emotion, Head Pose, Facial Landmarks)
+* Face Detection and Face analytics (Age/Gender, Emotion, Head Pose, Facial Landmarks)
 * Change inference mode (async/sync)
 * Rotate frame (x-axis, y-axis, both-axis)
 
@@ -189,5 +189,5 @@ Test with PC(Windows10)
 * You might need to add "--no_v4l" option.
 
 ```sh
-> 
+> python app.py -i cam -l extension\cpu_extension.dll --no_v4l
 ```
