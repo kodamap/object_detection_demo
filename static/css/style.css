@@ -11,6 +11,12 @@
   padding: .5rem;
 }
 
+.btn-secondary:not(:disabled):not(.disabled).active, .btn-secondary:not(:disabled):not(.disabled):active, .show>.btn-secondary.dropdown-toggle {
+  color: #fff;
+  background-color: #007bff;
+  border-color: #4e555b;
+}
+
 #res {
   margin: 5px;
   background-color: rgb(171, 201, 240);

@@ -1,24 +1,21 @@
 ###############################################################################
-# 
+#
 # The MIT License (MIT)
-# 
+#
 # Copyright (c) 2014 Miguel Grinberg
-# 
+#
 # Released under the MIT license
 # https://github.com/miguelgrinberg/flask-video-streaming/blob/master/LICENSE
 #
 ###############################################################################
 
-# Sample Usage:
-# python3 app.py -i cam -m IR/MobileNetSSD_FP16/MobileNetSSD_deploy.xml -d MYRIAD
-
 from flask import Flask, Response, render_template, request, jsonify
 from camera import VideoCamera
-from argparse import ArgumentParser
 from logging import getLogger, basicConfig, DEBUG, INFO
 import os
 import sys
 import json
+import interactive_detection
 
 app = Flask(__name__)
 logger = getLogger(__name__)
@@ -28,59 +25,21 @@ basicConfig(
     format="%(asctime)s %(levelname)s %(name)s %(funcName)s(): %(message)s")
 
 is_async_mode = True
-#filpcode: 
-#  0 : flipping around x-axis
-#  1 : flipping around y-axis
-# -1 : flipping around both axis
-flip_code = None
-
-
-# construct the argument parse and parse the arguments
-def build_argparser():
-    parser = ArgumentParser()
-    parser.add_argument(
-        "-m",
-        "--model",
-        help="Path to an .xml file with a trained model.",
-        required=True,
-        type=str)
-    parser.add_argument(
-        "-i",
-        "--input",
-        help="Path to video file or image. 'cam' for capturing video stream from camera",
-        required=True,
-        type=str)
-    parser.add_argument(
-        "-l",
-        "--cpu_extension",
-        help="MKLDNN (CPU)-targeted custom layers.Absolute path to a shared library with the kernels "
-        "impl.",
-        type=str,
-        default=None)
-    parser.add_argument(
-        "-d",
-        "--device",
-        help="Specify the target device to infer on; CPU, GPU, FPGA or MYRIAD is acceptable. Demo "
-        "will look for a suitable plugin for device specified (CPU by default)",
-        default="CPU",
-        type=str)
-    parser.add_argument(
-        "-pt",
-        "--prob_threshold",
-        help="Probability threshold for detections filtering",
-        default=0.2,
-        type=float)
-    parser.add_argument(
-        '--no_v4l',
-        help='cv2.VideoCapture without cv2.CAP_V4L',
-        action='store_true')
-
-    return parser
+is_object_detection = True
+is_face_detection = False
+is_age_gender_detection = False
+is_emotions_detection = False
+is_head_pose_detection = False
+is_facial_landmarks_detection = False
+flip_code = None  # filpcode: 0,x-axis 1,y-axis -1,both axis
 
 
 def gen(camera):
     while True:
-        frame = camera.get_frame(is_async_mode, flip_code)
+        frame = camera.get_frame(is_async_mode, flip_code, is_object_detection,
+                                 is_face_detection, is_age_gender_detection,
+                                 is_emotions_detection, is_head_pose_detection,
+                                 is_facial_landmarks_detection)
         yield (b'--frame\r\n'
                b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n\r\n')
 
@@ -88,13 +47,17 @@ def gen(camera):
 @app.route('/')
 def index():
     return render_template(
-        'index.html', is_async_mode=is_async_mode, flip_code=flip_code)
+        'index.html',
+        is_async_mode=is_async_mode,
+        flip_code=flip_code,
+        is_object_detection=is_object_detection,
+        devices=devices,
+        models=models)
 
 
 @app.route('/video_feed')
 def video_feed():
-    camera = VideoCamera(input, model_xml, model_bin, device, prob_threshold,
-                         cpu_extention, is_async_mode, flip_code, no_v4l)
+    camera = VideoCamera(args.input, detections, args.no_v4l)
     return Response(
         gen(camera), mimetype='multipart/x-mixed-replace; boundary=frame')
 
@@ -102,6 +65,12 @@ def video_feed():
 @app.route('/detection', methods=['POST'])
 def detection():
     global is_async_mode
+    global is_object_detection
+    global is_face_detection
+    global is_age_gender_detection
+    global is_emotions_detection
+    global is_head_pose_detection
+    global is_facial_landmarks_detection
 
     command = request.json['command']
     if command == "async":
@@ -109,13 +78,38 @@ def detection():
     elif command == "sync":
         is_async_mode = False
 
+    if command == "object_detection":
+        is_object_detection = True
+        is_face_detection = False
+    if command == "face_detection":
+        is_face_detection = True
+        is_object_detection = False
+    if command == "age_gender_detection" and not is_object_detection:
+        is_age_gender_detection = not is_age_gender_detection
+    if command == "emotions_detection" and not is_object_detection:
+        is_emotions_detection = not is_emotions_detection
+    if command == "head_pose_detection" and not is_object_detection:
+        is_head_pose_detection = not is_head_pose_detection
+    if command == "facial_landmarks_detection" and not is_object_detection:
+        is_facial_landmarks_detection = not is_facial_landmarks_detection
+
     result = {
         "command": "is_async_mode",
         "is_async_mode": is_async_mode,
-        "flip_code": flip_code
+        "flip_code": flip_code,
+        "is_object_detection": is_object_detection,
+        "is_face_detection": is_face_detection,
+        "is_age_gender_detection": is_age_gender_detection,
+        "is_emotions_detection": is_emotions_detection,
+        "is_head_pose_detection": is_head_pose_detection,
+        "is_facial_landmarks_detection": is_facial_landmarks_detection
     }
-    logger.info("command:{} is_async:{} flip_code:{}".format(
-        command, is_async_mode, flip_code))
+    logger.info(
+        "command:{} is_async:{} flip_code:{} is_obj_det:{} is_face_det:{} is_ag_det:{} is_em_det:{} is_hp_det:{} is_lm_det:{}".
+        format(command, is_async_mode, flip_code, is_object_detection,
+               is_face_detection, is_age_gender_detection,
+               is_emotions_detection, is_head_pose_detection,
+               is_facial_landmarks_detection))
     return jsonify(ResultSet=json.dumps(result))
 
 
@@ -137,28 +131,45 @@ def flip_frame():
     result = {
         "command": "is_async_mode",
         "is_async_mode": is_async_mode,
-        "flip_code": flip_code
+        "flip_code": flip_code,
+        "is_object_detection": is_object_detection,
+        "is_face_detection": is_face_detection,
+        "is_age_gender_detection": is_age_gender_detection,
+        "is_emotions_detection": is_emotions_detection,
+        "is_head_pose_detection": is_head_pose_detection,
+        "is_facial_landmarks_detection": is_facial_landmarks_detection
     }
-    logger.info("command:{} is_async:{} flip_code:{}".format(
-        command, is_async_mode, flip_code))
+    logger.info(
+        "command:{} is_async:{} flip_code:{} is_obj_det:{} is_face_det:{} is_ag_det:{} is_em_det:{} is_hp_det:{} is_lm_det:{}".
+        format(command, is_async_mode, flip_code, is_object_detection,
+               is_face_detection, is_age_gender_detection,
+               is_emotions_detection, is_head_pose_detection,
+               is_facial_landmarks_detection))
     return jsonify(ResultSet=json.dumps(result))
 
 
 if __name__ == '__main__':
 
-    args = build_argparser().parse_args()
-    input = args.input
-    cpu_extention = args.cpu_extension
-    model_xml = args.model
-    model_bin = os.path.splitext(model_xml)[0] + ".bin"
-    device = args.device
-    prob_threshold = args.prob_threshold
-    no_v4l = args.no_v4l
-
-    if device == "CPU" and cpu_extention is None:
+    # arg parse
+    args = interactive_detection.build_argparser().parse_args()
+    devices = [
+        args.device, args.device, args.device_age_gender, args.device_emotions,
+        args.device_head_pose, args.device_facial_landmarks
+    ]
+    models = [
+        args.model_ssd, args.model_face, args.model_age_gender,
+        args.model_emotions, args.model_head_pose, args.model_facial_landmarks
+    ]
+    if "CPU" in devices and args.cpu_extension is None:
         print(
             "\nPlease try to specify cpu extensions library path in demo's command line parameters using -l "
             "or --cpu_extension command line argument")
         sys.exit(1)
+
+    # Create detectors class instance
+    detections = interactive_detection.Detections(
+        devices, models, args.cpu_extension, args.plugin_dir,
+        args.prob_threshold, args.prob_threshold_face, is_async_mode)
+    models = detections.models  # Get models to display WebUI.
 
     app.run(host='0.0.0.0', threaded=True)

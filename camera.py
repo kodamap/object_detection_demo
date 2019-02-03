@@ -3,10 +3,12 @@ https://github.com/ECI-Robotics/opencv_remote_streaming_processing/
 """
 
 import cv2
-import detection
+import numpy as np
+import math
 import os
 import sys
 from logging import getLogger, basicConfig, DEBUG, INFO
+from timeit import default_timer as timer
 
 logger = getLogger(__name__)
 
@@ -14,14 +16,11 @@ basicConfig(
     level=INFO,
     format="%(asctime)s %(levelname)s %(name)s %(funcName)s(): %(message)s")
 
-frame_prop = (640, 480)
+resize_prop = (640, 480)
 
 
 class VideoCamera(object):
-    def __init__(self, input, model_xml, model_bin, device, prob_threshold,
-                 cpu_extention, is_async_mode, flip_code, no_v4l):
-        self.flip_code = flip_code
-
+    def __init__(self, input, detections, no_v4l):
         if input == 'cam':
             self.input_stream = 0
             if no_v4l:
@@ -31,10 +30,12 @@ class VideoCamera(object):
                 try:
                     self.cap = cv2.VideoCapture(self.input_stream, cv2.CAP_V4L)
                 except:
-                    logger.error(
-                        "cv2.VideoCapture() does not need v4l option. Try to start with --no_v4l option."
+                    import traceback
+                    traceback.print_exc()
+                    print(
+                        "\nPlease try to start with command line parameters using --no_v4l\n"
                     )
-                    sys.exit(1)
+                    os._exit(0)
         else:
             self.input_stream = input
             assert os.path.isfile(input), "Specified input file doesn't exist"
@@ -42,12 +43,9 @@ class VideoCamera(object):
 
         ret, self.frame = self.cap.read()
         cap_prop = self._get_cap_prop()
-        logger.info("cap_pop:{}, frame_prop:{}".format(cap_prop, frame_prop))
+        logger.info("cap_pop:{}, frame_prop:{}".format(cap_prop, resize_prop))
 
-        if ret:
-            self.detection = detection.ObjectDetection(
-                frame_prop, model_xml, model_bin, device, prob_threshold,
-                cpu_extention, is_async_mode)
+        self.detections = detections
 
     def __del__(self):
         self.cap.release()
@@ -56,26 +54,38 @@ class VideoCamera(object):
         return self.cap.get(cv2.CAP_PROP_FRAME_WIDTH), self.cap.get(
             cv2.CAP_PROP_FRAME_HEIGHT), self.cap.get(cv2.CAP_PROP_FPS)
 
-    def get_frame(self, is_async_mode, flip_code):
-        self.flip_code = flip_code
+    def get_frame(self, is_async_mode, flip_code, is_object_detection,
+                  is_face_detection, is_age_gender_detection,
+                  is_emotions_detection, is_head_pose_detection,
+                  is_facial_landmarks_detection):
 
         if is_async_mode:
             ret, next_frame = self.cap.read()
-            next_frame = cv2.resize(next_frame, frame_prop)
-            if self.input_stream == 0 and self.flip_code is not None:
-                next_frame = cv2.flip(next_frame, int(self.flip_code))
+            if not ret:
+                return None
+            next_frame = cv2.resize(next_frame, resize_prop)
+            if self.input_stream == 0 and flip_code is not None:
+                next_frame = cv2.flip(next_frame, int(flip_code))
         else:
             ret, self.frame = self.cap.read()
-            self.frame = cv2.resize(self.frame, frame_prop)
+            if not ret:
+                return None
+            self.frame = cv2.resize(self.frame, resize_prop)
             next_frame = None
-            if self.input_stream == 0 and self.flip_code is not None:
-                self.frame = cv2.flip(self.frame, int(self.flip_code))
-        if not ret:
-            return
+            if self.input_stream == 0 and flip_code is not None:
+                self.frame = cv2.flip(self.frame, int(flip_code))
 
-        frame = self.detection.start_inference(self.frame, next_frame,
-                                               is_async_mode)
-        ret, jpeg = cv2.imencode('1.jpg', frame)
+        if is_object_detection:
+            self.frame = self.detections.object_detection(
+                self.frame, next_frame, is_async_mode)
+
+        if is_face_detection:
+            self.frame = self.detections.face_detection(
+                self.frame, next_frame, is_async_mode, is_age_gender_detection,
+                is_emotions_detection, is_head_pose_detection,
+                is_facial_landmarks_detection)
+
+        ret, jpeg = cv2.imencode('1.jpg', self.frame)
 
         if is_async_mode:
             self.frame = next_frame
