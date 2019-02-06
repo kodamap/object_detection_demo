@@ -1,5 +1,5 @@
 from argparse import ArgumentParser
-from logging import getLogger, basicConfig, DEBUG, INFO
+from logging import getLogger, basicConfig, DEBUG, INFO, ERROR
 import os
 import sys
 import detectors
@@ -7,6 +7,7 @@ import cv2
 import math
 import numpy as np
 from timeit import default_timer as timer
+from queue import Queue
 
 logger = getLogger(__name__)
 
@@ -117,102 +118,181 @@ class Detections(Detectors):
                        is_age_gender_detection, is_emotions_detection,
                        is_head_pose_detection, is_facial_landmarks_detection):
 
+        # ----------- Start Face Detection ---------- #
+
+        logger.debug("** face_detection start **")
         color = (0, 255, 0)
         det_time = 0
+        det_time_ag = 0
+        det_time_em = 0
+        det_time_hp = 0
+        det_time_lm = 0
         det_time_txt = ""
 
         frame_h, frame_w = frame.shape[:2]  # shape (h, w, c)
         is_face_analytics_enabled = True if is_age_gender_detection or is_emotions_detection else False
 
-        # Start Face Detection
-        det_time, faces = self.face_detectors.face_inference(frame, next_frame,
-                                                             is_async_mode)
-        det_time_txt = "face:{:.3f} ".format(det_time * 1000)
+        inf_start = timer()
+        self.face_detectors.submit_req(frame, next_frame, is_async_mode)
+        ret = self.face_detectors.wait()
+        faces = self.face_detectors.get_results(is_async_mode)
+        inf_end = timer()
+        det_time = inf_end - inf_start
 
-        if faces is None:
-            return frame
+        face_count = faces.shape[2]
+        det_time_txt = "face_cnt:{} face:{:.3f} ms ".format(face_count, det_time * 1000)
+
+        # ----------- Start Face Analytics ---------- #
+
+        # Run face analytics with async mode when detected face count lager than 1.
+        if face_count > 1:
+            is_face_async_mode = True
+        else:
+            is_face_async_mode = False
 
         face_id = 0
+        face_w, face_h = 0, 0
         face_frame = None
         next_face_frame = None
-        for face in faces[0][0]:
-            # Draw detected faces on the frame
-            box = face[3:7] * np.array([frame_w, frame_h, frame_w, frame_h])
-            (xmin, ymin, xmax, ymax) = box.astype("int")
-            class_id = int(face[1])
-            result = str(face_id) + " " + str(round(face[2] * 100, 1)) + '% '
+        prev_box = None
 
+        face_q = Queue()
+        for face in faces[0][0]:
+            face_q.put(face)
+        
+        if is_face_async_mode:
+            face_count = face_count + 1
+
+        for face_id in range(face_count):
+            face_id = 0
             face_analytics = ""
             age_gender = ""
             emotion = ""
             head_pose = ""
             facial_landmark = ""
 
-            # Start face analytics
-            face_frame = frame[ymin:ymax, xmin:xmax]
-            if is_async_mode:
-                next_face_frame = face_frame
+            if not face_q.empty():
+                face = face_q.get()
 
-            # check face frame.
-            # Resizing face_frame will be failed when witdh or height of the face_fame is 0 ex. (243, 0, 3)
-            if face_frame.shape[0] == 0 or face_frame.shape[1] == 0:
-                logger.error(
-                    "The shape of face_frame is not appropriate. face_frame.shape:{}".
-                    format(face_frame.shape))
+            box = face[3:7] * np.array([frame_w, frame_h, frame_w, frame_h])
+            xmin, ymin, xmax, ymax = box.astype("int")
+            class_id = int(face[1])
+            result = str(face_id) + " " + str(round(face[2] * 100, 1)) + '% '
+
+            if xmin < 0 or ymin < 0:
+                logger.info(
+                    "Rapid motion returns negative value(xmin and ymin) which make face_frame None. xmin:{} xmax:{} ymin:{} ymax:{}".
+                    format(xmin, xmax, ymin, ymax))
                 return frame
 
+            # Start face analytics
+            # prev_box is previous boxes(faces), which is None at the first time 
+            # will be updated with prev face box in async mode
+            if is_face_async_mode:
+                next_face_frame = frame[ymin:ymax, xmin:xmax]
+                if next_face_frame is None:
+                    return frame
+                if prev_box is not None:
+                    xmin, ymin, xmax, ymax = prev_box.astype("int")
+            else:
+                face_frame = frame[ymin:ymax, xmin:xmax]
+
+            # check face frame.
+            # face_fame is None at the first time with async mode.
+            if face_frame is not None:
+                face_w, face_h = face_frame.shape[:2]
+                # Resizing face_frame will be failed when witdh or height of the face_fame is 0 ex. (243, 0, 3)
+                if face_w == 0 or face_h == 0:
+                    logger.error(
+                        "Unexpected shape of face frame. face_frame.shape:{} {}".
+                        format(face_h, face_w))
+                    return frame
+
+            # ----------- Start Age/Gender detection ---------- #
             if is_age_gender_detection:
-                det_time_ag, age, gender = self.age_gender_detectors.age_gender_inference(
-                    face_frame, next_face_frame, False)
-                det_time_txt = det_time_txt + "ag:{:.3f} ".format(det_time_ag *
-                                                                  1000)
-                det_time = det_time + det_time_ag
+                logger.debug("*** age_gender_detection start ***")
+
+                inf_start = timer()
+                self.age_gender_detectors.submit_req(face_frame, next_face_frame, is_face_async_mode)
+                ret = self.age_gender_detectors.wait()
+                age, gender = self.age_gender_detectors.get_results(is_face_async_mode)
                 age_gender = str(int(round(age))) + " " + gender + " "
+                inf_end = timer()
+                det_time_ag = inf_end - inf_start
+
+                #det_time = det_time + det_time_ag
+                det_time_ag += det_time_ag
+                #det_time_txt = det_time_txt + "ag:{:.3f} ".format(det_time_ag * 1000)
                 logger.debug("age:{} gender:{}".format(age, gender))
+                logger.debug("*** age_gender_detection end ***")
 
+            # ----------- Start Emotions detection ---------- #
             if is_emotions_detection:
-                det_time_em, emotion = self.emotions_detectors.emotions_inference(
-                    face_frame, next_face_frame, False)
-                det_time_txt = det_time_txt + "em:{:.3f} ".format(det_time_em *
-                                                                  1000)
-                det_time = det_time + det_time_em
+                logger.debug("*** emotions detection start ***")
+
+                inf_start = timer()
+                self.emotions_detectors.submit_req(face_frame, next_face_frame, is_face_async_mode)
+                ret = self.emotions_detectors.wait()
+                emotion = self.emotions_detectors.get_results(is_face_async_mode)
                 emotion = emotion + " "
+                inf_end = timer()
+                det_time_em = inf_end - inf_start
+
+                #det_time = det_time + det_time_em
+                det_time_em += det_time_em
+                #det_time_txt = det_time_txt + "em:{:.3f} ".format(det_time_em * 1000)
                 logger.debug("emotion:{}".format(emotion))
+                logger.debug("*** emotion_detection end ***")
 
+            # ----------- Start Head Pose detection ---------- #
             if is_head_pose_detection:
-                det_time_hp, yaw, pitch, roll = self.headpose_detectors.headpose_inference(
-                    face_frame, next_face_frame, False)
-                det_time_txt = det_time_txt + "hp:{:.3f} ".format(det_time_hp *
-                                                                  1000)
-                det_time = det_time + det_time_hp
-                center_of_face = (xmin + face_frame.shape[1] / 2,
-                                  ymin + face_frame.shape[0] / 2, 0)
-                logger.debug("yaw(z):{:f}, pitch(y):{:f} roll(x):{:f}".format(
-                    yaw, pitch, roll))
-                frame = self.draw_axes(frame, center_of_face, yaw, pitch, roll,
-                                       50)
+                logger.debug("*** head_pose_detection start ***")
 
+                inf_start = timer()
+                self.headpose_detectors.submit_req(face_frame, next_face_frame, is_face_async_mode)
+                ret = self.headpose_detectors.wait()
+                yaw, pitch, roll = self.headpose_detectors.get_results(is_face_async_mode)
+                # face h/w will be 0 at the first inference with async mode
+                if face_h != 0 and face_w != 0:
+                    center_of_face = (xmin + face_h / 2, ymin + face_w / 2, 0)
+                    frame = self.draw_axes(frame, center_of_face, yaw, pitch, roll, 50)
+                inf_end = timer()
+                det_time_hp = inf_end - inf_start
+
+                #det_time = det_time + det_time_hp
+                det_time_hp += det_time_hp
+                #det_time_txt = det_time_txt + "hp:{:.3f} ".format(det_time_hp * 1000)
+                logger.debug("yaw(z):{:f}, pitch(y):{:f} roll(x):{:f}".format(yaw, pitch, roll))
+                logger.debug("*** head_pose_detection end ***")
+
+            # ----------- Start facial landmarks detection ---------- #
             if is_facial_landmarks_detection:
-                det_time_lm, normed_landmarks = self.facial_landmarks_detectors.facial_landmarks_inference(
-                    face_frame, next_face_frame, False)
-                det_time_txt = det_time_txt + "lm:{:.3f} ".format(det_time_lm *
-                                                                  1000)
-                det_time = det_time + det_time_lm
-                center_of_face = (xmin + face_frame.shape[1] / 2,
-                                  ymin + face_frame[0] / 2, 0)
-                if normed_landmarks is not None:
-                    n_lm = normed_landmarks.size
-                    for i in range(int(n_lm / 2)):
-                        normed_x = normed_landmarks[2 * i]
-                        normed_y = normed_landmarks[2 * i + 1]
-                        x_lm = xmin + face_frame.shape[1] * normed_x
-                        y_lm = ymin + face_frame.shape[0] * normed_y
-                        cv2.circle(frame, (int(x_lm), int(y_lm)),
-                                   1 + int(0.012 * face_frame.shape[1]),
-                                   (0, 255, 255), -1)
+                logger.debug("*** landmarks_detection start ***")
 
-            if is_async_mode:
-                self.face_frame = next_face_frame
+                inf_start = timer()
+                self.facial_landmarks_detectors.submit_req(face_frame, next_face_frame, is_face_async_mode)
+                ret = self.facial_landmarks_detectors.wait()
+                normed_landmarks = self.facial_landmarks_detectors.get_results(is_face_async_mode)
+                n_lm = normed_landmarks.size
+                for i in range(int(n_lm / 2)):
+                    normed_x = normed_landmarks[2 * i]
+                    normed_y = normed_landmarks[2 * i + 1]
+                    x_lm = xmin + face_h * normed_x
+                    y_lm = ymin + face_w * normed_y
+                    cv2.circle(frame, (int(x_lm), int(y_lm)), 1 + int(0.012 * face_h), (0, 255, 255), -1)
+                inf_end = timer()
+                det_time_lm = inf_end - inf_start
+
+                #det_time = det_time + det_time_lm
+                det_time_lm += det_time_lm
+                #det_time_txt = det_time_txt + "lm:{:.3f} ".format(det_time_lm * 1000)
+                logger.debug("*** landmarks_detection end ***")
+
+            face_id += 1
+
+            if is_face_async_mode:
+                face_frame = next_face_frame
+                prev_box = box
 
             face_analytics = age_gender + emotion
 
@@ -229,9 +309,15 @@ class Detections(Detectors):
                             cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 0, 0), 1)
             logger.debug("face_id:{} confidence:{}%".format(
                 face_id, round(face[2] * 100)))
-            face_id += 1
+        
+        det_time = det_time + det_time_ag + det_time_em + det_time_hp + det_time_lm
+        det_time_txt = det_time_txt + "ag:{:.3f} ".format(det_time_ag * 1000)
+        det_time_txt = det_time_txt + "em:{:.3f} ".format(det_time_em * 1000)
+        det_time_txt = det_time_txt + "hp:{:.3f} ".format(det_time_hp * 1000)
+        det_time_txt = det_time_txt + "lm:{:.3f} ".format(det_time_lm * 1000)
 
-        frame = self.draw_perf_stats(det_time, det_time_txt, frame, is_async_mode)
+        frame = self.draw_perf_stats(det_time, det_time_txt, frame,
+                                     is_async_mode)
 
         return frame
 
@@ -249,9 +335,8 @@ class Detections(Detectors):
                        [math.sin(yaw), 0, math.cos(yaw)]])
         Rz = np.array([[math.cos(roll), -math.sin(roll), 0],
                        [math.sin(roll), math.cos(roll), 0], [0, 0, 1]])
-        ##R = np.dot(Rz, np.dot(Ry, Rx))
-        R = Rz @ Ry @ Rx
-        
+        R = Rz @ Ry @ Rx  # R = np.dot(Rz, np.dot(Ry, Rx))
+
         camera_matrix = self.build_camera_matrix(center_of_face, 950.0)
 
         xaxis = np.array(([1 * scale, 0, 0]), dtype='float32').reshape(3, 1)
@@ -310,12 +395,12 @@ class Detections(Detectors):
                     cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 0, 0), 1)
 
         # Draw performance stats
-        inf_time_message = "Inference time: {:.3f} ms for async mode".format(det_time * 1000) if is_async_mode else \
-            "Inference time: {:.3f} ms for sync mode".format(det_time * 1000)
+        inf_time_message = "Total Inference time: {:.3f} ms for async mode".format(det_time * 1000) if is_async_mode else \
+            "Total Inference time: {:.3f} ms for sync mode".format(det_time * 1000)
         cv2.putText(frame, inf_time_message, (15, 15),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.4, (200, 10, 10), 1)
         if det_time_txt:
-            inf_time_message_each = "Each det time: {}".format(det_time_txt)
+            inf_time_message_each = "Detection time: {}".format(det_time_txt)
             cv2.putText(frame, inf_time_message_each, (15, 30),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.4, (200, 10, 10), 1)
         return frame
