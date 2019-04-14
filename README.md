@@ -74,7 +74,7 @@ extension/IR/MobileNetSSD_FP32/MobileNetSSD_deploy.xml
 3. Download Face detection models IR files
 
 ```sh
-cd extension/IR/
+cd extension/IR/FP16/
 models="face-detection-retail-0004 age-gender-recognition-retail-0013 emotions-recognition-retail-0003 head-pose-estimation-adas-0001 landmarks-regression-retail-0009"
 for model in $models
 do
