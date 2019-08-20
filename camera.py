@@ -61,31 +61,30 @@ class VideoCamera(object):
 
         if is_async_mode:
             ret, next_frame = self.cap.read()
-            if not ret:
-                return None
             next_frame = cv2.resize(next_frame, resize_prop)
             if self.input_stream == 0 and flip_code is not None:
                 next_frame = cv2.flip(next_frame, int(flip_code))
         else:
             ret, self.frame = self.cap.read()
-            if not ret:
-                return None
             self.frame = cv2.resize(self.frame, resize_prop)
             next_frame = None
             if self.input_stream == 0 and flip_code is not None:
                 self.frame = cv2.flip(self.frame, int(flip_code))
 
         if is_object_detection:
-            self.frame = self.detections.object_detection(
-                self.frame, next_frame, is_async_mode)
-
+            frame = self.detections.object_detection(self.frame, next_frame,
+                                                     is_async_mode)
         if is_face_detection:
-            self.frame = self.detections.face_detection(
+            frame = self.detections.face_detection(
                 self.frame, next_frame, is_async_mode, is_age_gender_detection,
                 is_emotions_detection, is_head_pose_detection,
                 is_facial_landmarks_detection)
 
-        ret, jpeg = cv2.imencode('1.jpg', self.frame)
+        # The first detected frame is None
+        if frame is None:
+            ret, jpeg = cv2.imencode('1.jpg', self.frame)
+        else:
+            ret, jpeg = cv2.imencode('1.jpg', frame)
 
         if is_async_mode:
             self.frame = next_frame
