@@ -27,21 +27,22 @@ class VideoCamera(object):
                 self.cap = cv2.VideoCapture(self.input_stream)
             else:
                 # for Picamera, added VideoCaptureAPIs(cv2.CAP_V4L)
-                try:
-                    self.cap = cv2.VideoCapture(self.input_stream, cv2.CAP_V4L)
-                except:
-                    import traceback
-                    traceback.print_exc()
-                    print(
-                        "\nPlease try to start with command line parameters using --no_v4l\n"
-                    )
-                    os._exit(0)
+                self.cap = cv2.VideoCapture(self.input_stream, cv2.CAP_V4L)
         else:
             self.input_stream = input
             assert os.path.isfile(input), "Specified input file doesn't exist"
             self.cap = cv2.VideoCapture(self.input_stream)
 
         ret, self.frame = self.cap.read()
+        if ret:
+            cap_prop = self._get_cap_prop()
+            logger.info("cap_pop:{}, frame_prop:{}".format(
+                cap_prop, resize_prop))
+        else:
+            logger.error(
+                "Please try to start with command line parameters using --no_v4l")
+            os._exit(0)
+
         cap_prop = self._get_cap_prop()
         logger.info("cap_pop:{}, frame_prop:{}".format(cap_prop, resize_prop))
 
