@@ -1,8 +1,8 @@
 $(function () {
-    var detection_cmd = ['async', 'sync', 'object_detection',
-        'age_gender_detection', 'face_detection',
-        'emotions_detection', 'head_pose_detection',
-        'facial_landmarks_detection'];
+    var detection_cmd = ['async', 'sync',
+        'object_det', 'face_det',
+        'age_gender', 'emotions',
+        'head_pose', 'facial_landmarks'];
     var flip_cmd = ['flip'];
     var url = "";
     $('.btn').on('click', function () {
@@ -10,7 +10,6 @@ $(function () {
         if (JSON.parse(command).command == "") {
             var command = JSON.stringify({ "command": $(this).find('input').val() });
         }
-        //console.log(command)
         if (detection_cmd.includes(JSON.parse(command).command)) {
             url = '/detection';
             post(url, command);
@@ -29,14 +28,14 @@ $(function () {
             timeout: 10000
         }).done(function (data) {
             var sent_cmd = JSON.parse(command).command;
-            var is_async_mode = JSON.parse(data.ResultSet).is_async_mode;
+            var is_async_mode = JSON.parse(data.ResultSet).is_async;
             var flip_code = JSON.parse(data.ResultSet).flip_code;
-            var is_obj_det = JSON.parse(data.ResultSet).is_object_detection;
-            var is_face_det = JSON.parse(data.ResultSet).is_face_detection;
-            var is_ag_det = JSON.parse(data.ResultSet).is_age_gender_detection;
-            var is_em_det = JSON.parse(data.ResultSet).is_emotions_detection;
-            var is_hp_det = JSON.parse(data.ResultSet).is_head_pose_detection;
-            var is_lm_det = JSON.parse(data.ResultSet).is_facial_landmarks_detection;
+            var is_obj_det = JSON.parse(data.ResultSet).is_object_det;
+            var is_face_det = JSON.parse(data.ResultSet).is_face_det;
+            var is_ag_det = JSON.parse(data.ResultSet).is_age_gender;
+            var is_em_det = JSON.parse(data.ResultSet).is_emotions;
+            var is_hp_det = JSON.parse(data.ResultSet).is_head_pose;
+            var is_lm_det = JSON.parse(data.ResultSet).is_facial_landmarks;
             //console.log(sent_cmd);
             $("#res").text("obj:" + is_obj_det + " face:" + is_face_det + " ag:" + is_ag_det + " em:" + is_em_det + " hp:" + is_hp_det + " lm:" + is_lm_det);
             if (sent_cmd == 'async') {
@@ -47,11 +46,11 @@ $(function () {
                 $("#sync").attr('class', 'btn btn-danger');
                 $("#async").attr('class', 'btn btn-dark');
             }
-            if (sent_cmd == 'object_detection') {
-                $("#is_face_detection").attr("disabled", true);
+            if (sent_cmd == 'object_det') {
+                $("#is_face_det").attr("disabled", true);
             }
-            if (sent_cmd == 'face_detection') {
-                $("#is_face_detection").attr("disabled", false);
+            if (sent_cmd == 'face_det') {
+                $("#is_face_det").attr("disabled", false);
             }
         }).fail(function (jqXHR, textStatus, errorThrown) {
             $("#res").text(textStatus + ":" + jqXHR.status + " " + errorThrown);
